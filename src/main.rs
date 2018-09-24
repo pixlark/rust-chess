@@ -100,6 +100,18 @@ struct Pos {
     rank: usize,
 }
 
+impl Pos {
+    fn new(file: usize, rank: usize) -> Pos {
+        Pos { file, rank }
+    }
+    fn from_ordinals(file: usize, rank: usize) -> Pos {
+        Pos {
+            file: file - 1,
+            rank: rank - 1,
+        }
+    }
+}
+
 const SQUARE_SIZE: u32 = 64;
 const WHITE_SQUARE: Color = Color {
     r: 174,
@@ -120,6 +132,30 @@ impl Board {
         Board {
             board: [[Option::None; 8]; 8],
         }
+    }
+    fn starting() -> Board {
+        let mut board = Board::empty();
+        for i in 1..9 {
+            board.place(Piece::Pawn(Side::White), Pos::from_ordinals(i, 2));
+            board.place(Piece::Pawn(Side::Black), Pos::from_ordinals(i, 7));
+        }
+        for i in [1usize, 8usize].iter() {
+            board.place(Piece::Rook(Side::White), Pos::from_ordinals(*i, 1));
+            board.place(Piece::Rook(Side::Black), Pos::from_ordinals(*i, 8));
+        }
+        for i in [2usize, 7usize].iter() {
+            board.place(Piece::Knight(Side::White), Pos::from_ordinals(*i, 1));
+            board.place(Piece::Knight(Side::Black), Pos::from_ordinals(*i, 8));
+        }
+        for i in [3usize, 6usize].iter() {
+            board.place(Piece::Bishop(Side::White), Pos::from_ordinals(*i, 1));
+            board.place(Piece::Bishop(Side::Black), Pos::from_ordinals(*i, 8));
+        }
+        board.place(Piece::Queen(Side::White), Pos::from_ordinals(4, 1));
+        board.place(Piece::Queen(Side::Black), Pos::from_ordinals(4, 8));
+        board.place(Piece::King(Side::White), Pos::from_ordinals(5, 1));
+        board.place(Piece::King(Side::Black), Pos::from_ordinals(5, 8));
+        board
     }
     fn place(self: &mut Board, piece: Piece, pos: Pos) {
         self.board[pos.file][pos.rank] = Option::Some(piece);
@@ -156,7 +192,7 @@ impl Board {
             Option::None,
             Option::Some(Rect::new(
                 (pos.file as i32) * (SQUARE_SIZE as i32),
-                (pos.rank as i32) * (SQUARE_SIZE as i32),
+                (7 - pos.rank as i32) * (SQUARE_SIZE as i32),
                 SQUARE_SIZE,
                 SQUARE_SIZE,
             )),
@@ -170,16 +206,16 @@ impl Board {
         // Squares
         for rank in 0..8 {
             for file in 0..8 {
-                self.draw_square(canvas, Pos { file, rank })?;
+                self.draw_square(canvas, Pos::new(file, rank))?;
             }
         }
         // Pieces
         for rank in 0..8 {
             for file in 0..8 {
-                if self.at(Pos { file, rank }).is_some() {
+                if self.at(Pos::new(file, rank)).is_some() {
                     self.draw_piece(
-                        self.at(Pos { file, rank }).unwrap(),
-                        Pos { file, rank },
+                        self.at(Pos::new(file, rank)).unwrap(),
+                        Pos::new(file, rank),
                         canvas,
                         texture_table,
                     );
@@ -205,17 +241,8 @@ fn main() {
     let mut canvas = window.into_canvas().build().unwrap();
     let texture_creator = canvas.texture_creator();
     let texture_table = TextureTable::new(&texture_creator).unwrap();
-    for i in 0..2 {
-        for j in 0..6 {
-            match &(texture_table.table[i][j]) {
-                Some(val) => println!("Some"),
-                None => println!("None"),
-            }
-        }
-    }
 
-    let mut board: Board = Board::empty();
-    board.place(Piece::Rook(Side::White), Pos { file: 4, rank: 4 });
+    let mut board: Board = Board::starting();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -226,7 +253,6 @@ fn main() {
             }
         }
         canvas.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
-        //canvas.clear(); // unnecessary while drawing entire bg board
         board.draw(&mut canvas, &texture_table).unwrap();
         canvas.present();
     }
