@@ -95,6 +95,7 @@ struct Board {
     board: [[Option<Piece>; 8]; 8],
 }
 
+#[derive(Debug)]
 struct Pos {
     file: usize,
     rank: usize,
@@ -224,6 +225,16 @@ impl Board {
         }
         Result::Ok(())
     }
+    fn coord_to_pos(coord: (i32, i32)) -> Pos {
+        Pos::new((coord.0 as f32 / SQUARE_SIZE as f32).floor() as usize,
+                 7 - (coord.1 as f32 / SQUARE_SIZE as f32).floor() as usize)
+    }
+    fn update(self: &Board, pump: &sdl2::EventPump) {
+        let mouse_state = pump.mouse_state();
+        if mouse_state.left() {
+            println!("{:?}", Board::coord_to_pos((mouse_state.x(), mouse_state.y())));
+        }
+    }
 }
 
 fn main() {
@@ -253,6 +264,7 @@ fn main() {
             }
         }
         canvas.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
+        board.update(&event_pump);
         board.draw(&mut canvas, &texture_table).unwrap();
         canvas.present();
     }
