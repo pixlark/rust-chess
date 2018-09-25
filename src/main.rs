@@ -8,33 +8,31 @@ use sdl2::rect::Rect;
 use sdl2::render::{Texture, TextureCreator};
 use sdl2::video::WindowContext;
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 enum Side {
     White = 0,
     Black = 1,
 }
 
-#[derive(Copy, Clone)]
-enum Piece {
-    Pawn(Side),
-    Knight(Side),
-    Bishop(Side),
-    Rook(Side),
-    Queen(Side),
-    King(Side),
+#[derive(Debug, Copy, Clone)]
+enum PieceType {
+    Pawn = 0,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct Piece {
+    piece_type: PieceType,
+    side: Side,
 }
 
 impl Piece {
     fn texture_index(self: &Piece) -> (usize, usize) {
-        // TODO(pixlark): Please tell me there's a better way to do this.
-        match self {
-            Piece::Pawn(side) => (*side as usize, 0),
-            Piece::Knight(side) => (*side as usize, 1),
-            Piece::Bishop(side) => (*side as usize, 2),
-            Piece::Rook(side) => (*side as usize, 3),
-            Piece::Queen(side) => (*side as usize, 4),
-            Piece::King(side) => (*side as usize, 5),
-        }
+        (self.side as usize, self.piece_type as usize,)
     }
 }
 
@@ -146,25 +144,25 @@ impl Board {
     fn starting() -> Board {
         let mut board = Board::empty();
         for i in 1..9 {
-            board.place(Piece::Pawn(Side::White), Pos::from_ordinals(i, 2));
-            board.place(Piece::Pawn(Side::Black), Pos::from_ordinals(i, 7));
+            board.place(Piece { piece_type: PieceType::Pawn, side: Side::White }, Pos::from_ordinals(i, 2));
+            board.place(Piece { piece_type: PieceType::Pawn, side: Side::Black }, Pos::from_ordinals(i, 7));
         }
         for i in [1usize, 8usize].iter() {
-            board.place(Piece::Rook(Side::White), Pos::from_ordinals(*i, 1));
-            board.place(Piece::Rook(Side::Black), Pos::from_ordinals(*i, 8));
+            board.place(Piece { piece_type: PieceType::Rook, side: Side::White }, Pos::from_ordinals(*i, 1));
+            board.place(Piece { piece_type: PieceType::Rook, side: Side::Black }, Pos::from_ordinals(*i, 8));
         }
         for i in [2usize, 7usize].iter() {
-            board.place(Piece::Knight(Side::White), Pos::from_ordinals(*i, 1));
-            board.place(Piece::Knight(Side::Black), Pos::from_ordinals(*i, 8));
+            board.place(Piece { piece_type: PieceType::Knight, side: Side::White }, Pos::from_ordinals(*i, 1));
+            board.place(Piece { piece_type: PieceType::Knight, side: Side::Black }, Pos::from_ordinals(*i, 8));
         }
         for i in [3usize, 6usize].iter() {
-            board.place(Piece::Bishop(Side::White), Pos::from_ordinals(*i, 1));
-            board.place(Piece::Bishop(Side::Black), Pos::from_ordinals(*i, 8));
+            board.place(Piece { piece_type: PieceType::Bishop, side: Side::White }, Pos::from_ordinals(*i, 1));
+            board.place(Piece { piece_type: PieceType::Bishop, side: Side::Black }, Pos::from_ordinals(*i, 8));
         }
-        board.place(Piece::Queen(Side::White), Pos::from_ordinals(4, 1));
-        board.place(Piece::Queen(Side::Black), Pos::from_ordinals(4, 8));
-        board.place(Piece::King(Side::White), Pos::from_ordinals(5, 1));
-        board.place(Piece::King(Side::Black), Pos::from_ordinals(5, 8));
+        board.place(Piece { piece_type: PieceType::Queen, side: Side::White }, Pos::from_ordinals(4, 1));
+        board.place(Piece { piece_type: PieceType::Queen, side: Side::Black }, Pos::from_ordinals(4, 8));
+        board.place(Piece { piece_type: PieceType::King, side: Side::White }, Pos::from_ordinals(5, 1));
+        board.place(Piece { piece_type: PieceType::King, side: Side::Black }, Pos::from_ordinals(5, 8));
         board
     }
     fn place(self: &mut Board, piece: Piece, pos: Pos) {
@@ -180,6 +178,8 @@ impl Board {
                                                        // because the borrow checker is a dumb machine.
             self.place(start_piece, end);
             self.board[start.file][start.rank] = Option::None;
+        } else {
+            panic!("Game state has become invalid");
         }
     }
     fn draw_square(self: &Board, canvas: &mut WindowCanvas, pos: Pos) -> Result<(), String> {
@@ -267,13 +267,14 @@ impl Board {
 #[derive(Debug)]
 struct ControlState {
     active_piece: Option<Pos>,
+    turn: Side,
 }
 
 fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::EventPump) {
     let mouse_state = pump.mouse_state(); // TODO(pixlark): Perhaps just pass MouseState rather than EventPump?
     match board.get_click(pump) {
         Option::Some(pos) => {
-            if control_state.active_piece.is_none() {
+            if board.at(pos).is_some() && control_state.active_piece.is_none() {
                 control_state.active_piece = Option::Some(pos);
                 board.props[pos.file][pos.rank].piece_visible = false;
             }
@@ -337,6 +338,7 @@ fn main() {
 
     let mut control_state = ControlState {
         active_piece: Option::None,
+        turn: Side::White,
     };
 
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -350,7 +352,6 @@ fn main() {
         canvas.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
 
         update(&mut board, &mut control_state, &event_pump);
-        //println!("{:?}", control_state);
 
         board.draw(&mut canvas, &texture_table).unwrap();
         draw_transient_piece(
