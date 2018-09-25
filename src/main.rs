@@ -177,6 +177,9 @@ impl SignedPos {
         }
     }
     fn to_pos(self: &SignedPos) -> Pos {
+        if !self.valid() {
+            panic!("Tried to convert invalid SignedPos to Pos");
+        }
         Pos {
             file: self.file as usize,
             rank: self.rank as usize,
@@ -356,7 +359,7 @@ impl Board {
                 let piece = self.at(npos.to_pos());
                 if piece.is_some() {
                     let piece = piece.unwrap();
-                    if (piece.side != side) {
+                    if piece.side != side {
                         mvec.push(Move::new(npos.to_pos(), Some(piece)));
                     }
                 } else {
@@ -366,21 +369,39 @@ impl Board {
         }
         mvec
     }
-    fn move_squares_pawn(self: &Board, pos: Pos, side: Side) -> Vec<Move> {
+    fn move_squares_pawn(self: &Board, pos: Pos) -> Vec<Move> {
+        let side = self.at(pos).unwrap().side;
         let mut mvec = Vec::new();
+        // Movement
         let fwd = match side {
-            Side::White => Pos::new(pos.file, pos.rank + 1),
-            Side::Black => Pos::new(pos.file, pos.rank - 1),
+            Side::White => SignedPos::new(pos.file as i32, pos.rank as i32 + 1),
+            Side::Black => SignedPos::new(pos.file as i32, pos.rank as i32 - 1),
         };
-        if SignedPos::from_pos(fwd).valid() && self.at(fwd).is_none() {
-            mvec.push(Move::new(fwd, None));
+        if fwd.valid() && self.at(fwd.to_pos()).is_none() {
+            mvec.push(Move::new(fwd.to_pos(), None));
+        }
+        // Capturing
+        let caps = [
+            SignedPos::new(fwd.file - 1, fwd.rank),
+            SignedPos::new(fwd.file + 1, fwd.rank),
+        ];
+        for cap in caps.iter() {
+            if cap.valid() {
+                let piece = self.at(cap.to_pos());
+                if piece.is_some() {
+                    let piece = piece.unwrap();
+                    if piece.side != side {
+                        mvec.push(Move::new(cap.to_pos(), Some(piece)));
+                    }
+                }
+            }
         }
         mvec
     }
     fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Move> {
         // TODO(pixlark): Combine piece and pos, just use self.at()?
         match piece.piece_type {
-            PieceType::Pawn => self.move_squares_pawn(pos, piece.side),
+            PieceType::Pawn => self.move_squares_pawn(pos),
             PieceType::Knight => self.move_squares_knight(pos),
             PieceType::Bishop => self.move_squares_diagonal(pos, None),
             PieceType::Rook => self.move_squares_lateral(pos, None),
@@ -590,7 +611,7 @@ fn main() {
     );
     board.place(
         Piece::new(PieceType::Pawn, Side::Black),
-        Pos::from_ordinals(6, 5),
+        Pos::from_ordinals(6, 6),
     );
     board.place(
         Piece::new(PieceType::Bishop, Side::White),
@@ -611,7 +632,7 @@ fn main() {
 
     let mut control_state = ControlState {
         active_piece: None,
-        turn: Side::White,
+        turn: Side::Black,
     };
 
     let mut event_pump = sdl_context.event_pump().unwrap();
