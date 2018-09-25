@@ -151,11 +151,23 @@ struct SignedPos {
 }
 
 impl SignedPos {
+    fn new(file: i32, rank: i32) -> SignedPos {
+        SignedPos { file, rank }
+    }
     fn from_pos(pos: Pos) -> SignedPos {
-        SignedPos { file: pos.file as i32, rank: pos.rank as i32 }
+        SignedPos {
+            file: pos.file as i32,
+            rank: pos.rank as i32,
+        }
     }
     fn to_pos(self: &SignedPos) -> Pos {
-        Pos { file: self.file as usize, rank: self.rank as usize }
+        Pos {
+            file: self.file as usize,
+            rank: self.rank as usize,
+        }
+    }
+    fn valid(self: &SignedPos) -> bool {
+        self.rank >= 0 && self.rank < 8 && self.file >= 0 && self.file < 8
     }
 }
 //
@@ -265,58 +277,50 @@ impl Board {
         );
         board
     }
+    fn test_line(self: &Board, pos: Pos, variant: SignedPos) -> Vec<Pos> {
+        let mut mvec = Vec::new();
+        let mut vpos = SignedPos::from_pos(pos);
+        loop {
+            vpos.file += variant.file;
+            vpos.rank += variant.rank;
+            if !vpos.valid() || self.at(vpos.to_pos()).is_some() {
+                break;
+            }
+            mvec.push(vpos.to_pos());
+        }
+        mvec
+    }
     fn move_squares_rook(self: &Board, pos: Pos) -> Vec<Pos> {
-        let mut vec = Vec::new();
-        {
-            // North
-            let mut north_pos = SignedPos::from_pos(pos);
-            loop {
-                north_pos.rank += 1;
-                if north_pos.rank > 7 || self.at(north_pos.to_pos()).is_some() {
-                    break;
-                }
-                vec.push(north_pos.to_pos());
-            }
+        let mut mvec = Vec::new();
+        let variants = [
+            SignedPos::new(0, 1),  // N
+            SignedPos::new(0, -1), // S
+            SignedPos::new(1, 0),  // E
+            SignedPos::new(-1, 0), // W
+        ];
+        for variant in variants.iter() {
+            mvec.append(&mut self.test_line(pos, *variant));
         }
-        {
-            // South
-            let mut south_pos = SignedPos::from_pos(pos);
-            loop {
-                south_pos.rank -= 1;
-                if south_pos.rank < 0 || self.at(south_pos.to_pos()).is_some() {
-                    break;
-                }
-                vec.push(south_pos.to_pos());
-            }
+        mvec
+    }
+    fn move_squares_bishop(self: &Board, pos: Pos) -> Vec<Pos> {
+        let mut mvec = Vec::new();
+        let variants = [
+            SignedPos::new(1, 1),   // NE
+            SignedPos::new(1, -1),  // SE
+            SignedPos::new(-1, -1), // SW
+            SignedPos::new(-1, 1),  // NW
+        ];
+        for variant in variants.iter() {
+            mvec.append(&mut self.test_line(pos, *variant));
         }
-        {
-            // East
-            let mut east_pos = SignedPos::from_pos(pos);
-            loop {
-                east_pos.file += 1;
-                if east_pos.file > 7 || self.at(east_pos.to_pos()).is_some() {
-                    break;
-                }
-                vec.push(east_pos.to_pos());
-            }
-        }
-        {
-            // West
-            let mut west_pos = SignedPos::from_pos(pos);
-            loop {
-                west_pos.file -= 1;
-                if west_pos.file < 0 || self.at(west_pos.to_pos()).is_some() {
-                    break;
-                }
-                vec.push(west_pos.to_pos());
-            }
-        }
-        vec
+        mvec
     }
     fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Pos> {
         // TODO(pixlark): Combine piece and pos, just use self.at()?
         match piece.piece_type {
             PieceType::Rook => self.move_squares_rook(pos),
+            PieceType::Bishop => self.move_squares_bishop(pos),
             _ => panic!("Movement not implemented for this yet..."),
         }
     }
@@ -327,11 +331,10 @@ impl Board {
         self.board[pos.file][pos.rank]
     }
     fn mov(self: &mut Board, start: Pos, end: Pos) {
-        //self.board[end.file][end.rank] = self.board[start.file][start.rank];
         if start == end {
             return;
         }
-        if self.at(start).is_some() && self.at(end).is_none() {
+        if self.at(start).is_some() {
             let start_piece = self.at(start).unwrap();
             let move_squares = self.move_squares(start_piece, start);
             if move_squares.contains(&end) {
@@ -339,7 +342,10 @@ impl Board {
                 self.board[start.file][start.rank] = Option::None;
             }
         } else {
-            panic!("Game state has become invalid");
+            panic!(
+                "Game state has become invalid --- \
+                 tried to move a piece that doesn't exist."
+            );
         }
     }
     fn draw_square(self: &Board, canvas: &mut WindowCanvas, pos: Pos) -> Result<(), String> {
@@ -506,6 +512,20 @@ fn main() {
             side: Side::White,
         },
         Pos::from_ordinals(3, 3),
+    );
+    board.place(
+        Piece {
+            piece_type: PieceType::Pawn,
+            side: Side::White,
+        },
+        Pos::from_ordinals(5, 5),
+    );
+    board.place(
+        Piece {
+            piece_type: PieceType::Bishop,
+            side: Side::White,
+        },
+        Pos::from_ordinals(4, 6),
     );
 
     let mut control_state = ControlState {
