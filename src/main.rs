@@ -101,8 +101,7 @@ struct Board {
     props: [[SquareProp; 8]; 8],
 }
 
-#[derive(Debug)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct Pos {
     file: usize,
     rank: usize,
@@ -268,14 +267,42 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
                 control_state.active_piece = Option::Some(pos);
                 board.props[pos.file][pos.rank].piece_visible = false;
             }
-        },
+        }
         Option::None => {
             if control_state.active_piece.is_some() {
                 let pos = control_state.active_piece.unwrap();
                 board.props[pos.file][pos.rank].piece_visible = true;
                 control_state.active_piece = Option::None;
             }
-        },
+        }
+    }
+}
+
+fn draw_transient_piece(
+    canvas: &mut WindowCanvas,
+    board: &Board,
+    control_state: &ControlState,
+    pump: &sdl2::EventPump,
+    texture_table: &TextureTable,
+) {
+    let mouse_state = pump.mouse_state();
+    if control_state.active_piece.is_some() {
+        let pos = control_state.active_piece.unwrap();
+        if board.at(pos).is_some() {
+            let tex_index = board.at(pos).unwrap().texture_index();
+            canvas.copy(
+                texture_table.table[tex_index.0][tex_index.1]
+                    .as_ref()
+                    .unwrap(),
+                Option::None,
+                Option::Some(Rect::new(
+                    mouse_state.x() - (SQUARE_SIZE as i32 / 2),
+                    mouse_state.y() - (SQUARE_SIZE as i32 / 2),
+                    SQUARE_SIZE,
+                    SQUARE_SIZE,
+                )),
+            );            
+        }
     }
 }
 
@@ -315,6 +342,7 @@ fn main() {
         //println!("{:?}", control_state);
 
         board.draw(&mut canvas, &texture_table).unwrap();
+        draw_transient_piece(&mut canvas, &board, &control_state, &event_pump, &texture_table);
         canvas.present();
     }
 }
