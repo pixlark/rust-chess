@@ -1,5 +1,7 @@
 extern crate sdl2;
 
+use std::vec::Vec;
+
 use sdl2::event::Event;
 use sdl2::image;
 use sdl2::image::LoadTexture;
@@ -15,7 +17,7 @@ enum Side {
 }
 
 impl Side {
-    fn flip(self: &Side) -> Side {
+    fn flipped(self: &Side) -> Side {
         match self {
             Side::White => Side::Black,
             Side::Black => Side::White,
@@ -41,7 +43,7 @@ struct Piece {
 
 impl Piece {
     fn texture_index(self: &Piece) -> (usize, usize) {
-        (self.side as usize, self.piece_type as usize,)
+        (self.side as usize, self.piece_type as usize)
     }
 }
 
@@ -108,7 +110,7 @@ struct Board {
     props: [[SquareProp; 8]; 8],
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Pos {
     file: usize,
     rank: usize,
@@ -141,6 +143,23 @@ const BLACK_SQUARE: Color = Color {
 };
 type WindowCanvas = sdl2::render::Canvas<sdl2::video::Window>;
 
+// Signed pos, useful for calculating possible piece positions
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct SignedPos {
+    file: i32,
+    rank: i32,
+}
+
+impl SignedPos {
+    fn from_pos(pos: Pos) -> SignedPos {
+        SignedPos { file: pos.file as i32, rank: pos.rank as i32 }
+    }
+    fn to_pos(self: &SignedPos) -> Pos {
+        Pos { file: self.file as usize, rank: self.rank as usize }
+    }
+}
+//
+
 impl Board {
     fn empty() -> Board {
         Board {
@@ -153,26 +172,153 @@ impl Board {
     fn starting() -> Board {
         let mut board = Board::empty();
         for i in 1..9 {
-            board.place(Piece { piece_type: PieceType::Pawn, side: Side::White }, Pos::from_ordinals(i, 2));
-            board.place(Piece { piece_type: PieceType::Pawn, side: Side::Black }, Pos::from_ordinals(i, 7));
+            board.place(
+                Piece {
+                    piece_type: PieceType::Pawn,
+                    side: Side::White,
+                },
+                Pos::from_ordinals(i, 2),
+            );
+            board.place(
+                Piece {
+                    piece_type: PieceType::Pawn,
+                    side: Side::Black,
+                },
+                Pos::from_ordinals(i, 7),
+            );
         }
         for i in [1usize, 8usize].iter() {
-            board.place(Piece { piece_type: PieceType::Rook, side: Side::White }, Pos::from_ordinals(*i, 1));
-            board.place(Piece { piece_type: PieceType::Rook, side: Side::Black }, Pos::from_ordinals(*i, 8));
+            board.place(
+                Piece {
+                    piece_type: PieceType::Rook,
+                    side: Side::White,
+                },
+                Pos::from_ordinals(*i, 1),
+            );
+            board.place(
+                Piece {
+                    piece_type: PieceType::Rook,
+                    side: Side::Black,
+                },
+                Pos::from_ordinals(*i, 8),
+            );
         }
         for i in [2usize, 7usize].iter() {
-            board.place(Piece { piece_type: PieceType::Knight, side: Side::White }, Pos::from_ordinals(*i, 1));
-            board.place(Piece { piece_type: PieceType::Knight, side: Side::Black }, Pos::from_ordinals(*i, 8));
+            board.place(
+                Piece {
+                    piece_type: PieceType::Knight,
+                    side: Side::White,
+                },
+                Pos::from_ordinals(*i, 1),
+            );
+            board.place(
+                Piece {
+                    piece_type: PieceType::Knight,
+                    side: Side::Black,
+                },
+                Pos::from_ordinals(*i, 8),
+            );
         }
         for i in [3usize, 6usize].iter() {
-            board.place(Piece { piece_type: PieceType::Bishop, side: Side::White }, Pos::from_ordinals(*i, 1));
-            board.place(Piece { piece_type: PieceType::Bishop, side: Side::Black }, Pos::from_ordinals(*i, 8));
+            board.place(
+                Piece {
+                    piece_type: PieceType::Bishop,
+                    side: Side::White,
+                },
+                Pos::from_ordinals(*i, 1),
+            );
+            board.place(
+                Piece {
+                    piece_type: PieceType::Bishop,
+                    side: Side::Black,
+                },
+                Pos::from_ordinals(*i, 8),
+            );
         }
-        board.place(Piece { piece_type: PieceType::Queen, side: Side::White }, Pos::from_ordinals(4, 1));
-        board.place(Piece { piece_type: PieceType::Queen, side: Side::Black }, Pos::from_ordinals(4, 8));
-        board.place(Piece { piece_type: PieceType::King, side: Side::White }, Pos::from_ordinals(5, 1));
-        board.place(Piece { piece_type: PieceType::King, side: Side::Black }, Pos::from_ordinals(5, 8));
+        board.place(
+            Piece {
+                piece_type: PieceType::Queen,
+                side: Side::White,
+            },
+            Pos::from_ordinals(4, 1),
+        );
+        board.place(
+            Piece {
+                piece_type: PieceType::Queen,
+                side: Side::Black,
+            },
+            Pos::from_ordinals(4, 8),
+        );
+        board.place(
+            Piece {
+                piece_type: PieceType::King,
+                side: Side::White,
+            },
+            Pos::from_ordinals(5, 1),
+        );
+        board.place(
+            Piece {
+                piece_type: PieceType::King,
+                side: Side::Black,
+            },
+            Pos::from_ordinals(5, 8),
+        );
         board
+    }
+    fn move_squares_rook(self: &Board, pos: Pos) -> Vec<Pos> {
+        let mut vec = Vec::new();
+        {
+            // North
+            let mut north_pos = SignedPos::from_pos(pos);
+            loop {
+                north_pos.rank += 1;
+                if north_pos.rank > 7 || self.at(north_pos.to_pos()).is_some() {
+                    break;
+                }
+                vec.push(north_pos.to_pos());
+            }
+        }
+        {
+            // South
+            let mut south_pos = SignedPos::from_pos(pos);
+            loop {
+                south_pos.rank -= 1;
+                if south_pos.rank < 0 || self.at(south_pos.to_pos()).is_some() {
+                    break;
+                }
+                vec.push(south_pos.to_pos());
+            }
+        }
+        {
+            // East
+            let mut east_pos = SignedPos::from_pos(pos);
+            loop {
+                east_pos.file += 1;
+                if east_pos.file > 7 || self.at(east_pos.to_pos()).is_some() {
+                    break;
+                }
+                vec.push(east_pos.to_pos());
+            }
+        }
+        {
+            // West
+            let mut west_pos = SignedPos::from_pos(pos);
+            loop {
+                west_pos.file -= 1;
+                if west_pos.file < 0 || self.at(west_pos.to_pos()).is_some() {
+                    break;
+                }
+                vec.push(west_pos.to_pos());
+            }
+        }
+        vec
+    }
+    fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Pos> {
+        // TODO(pixlark): Combine piece and pos, just use self.at()?
+        match piece.piece_type {
+            PieceType::Rook => self.move_squares_rook(pos),
+            _ => panic!("Movement not implemented for this yet..."),
+        }
     }
     fn place(self: &mut Board, piece: Piece, pos: Pos) {
         self.board[pos.file][pos.rank] = Option::Some(piece);
@@ -182,11 +328,16 @@ impl Board {
     }
     fn mov(self: &mut Board, start: Pos, end: Pos) {
         //self.board[end.file][end.rank] = self.board[start.file][start.rank];
+        if start == end {
+            return;
+        }
         if self.at(start).is_some() && self.at(end).is_none() {
-            let start_piece = self.at(start).unwrap(); // Can't do this in self.place directly
-                                                       // because the borrow checker is a dumb machine.
-            self.place(start_piece, end);
-            self.board[start.file][start.rank] = Option::None;
+            let start_piece = self.at(start).unwrap();
+            let move_squares = self.move_squares(start_piece, start);
+            if move_squares.contains(&end) {
+                self.place(start_piece, end);
+                self.board[start.file][start.rank] = Option::None;
+            }
         } else {
             panic!("Game state has become invalid");
         }
@@ -283,9 +434,10 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
     let mouse_state = pump.mouse_state(); // TODO(pixlark): Perhaps just pass MouseState rather than EventPump?
     match board.get_click(pump) {
         Option::Some(pos) => {
-            if board.at(pos).is_some() &&
-               board.at(pos).unwrap().side == control_state.turn &&
-               control_state.active_piece.is_none() {
+            if board.at(pos).is_some()
+                && board.at(pos).unwrap().side == control_state.turn
+                && control_state.active_piece.is_none()
+            {
                 control_state.active_piece = Option::Some(pos);
                 board.props[pos.file][pos.rank].piece_visible = false;
             }
@@ -296,7 +448,7 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
                 board.mov(pos, Board::coord_to_pos((mouse_state.x(), mouse_state.y())));
                 board.props[pos.file][pos.rank].piece_visible = true;
                 control_state.active_piece = Option::None;
-                control_state.turn = control_state.turn.flip();
+                //control_state.turn = control_state.turn.flipped();
             }
         }
     }
@@ -346,7 +498,15 @@ fn main() {
     let texture_creator = canvas.texture_creator();
     let texture_table = TextureTable::new(&texture_creator).unwrap();
 
-    let mut board: Board = Board::starting();
+    //let mut board: Board = Board::starting();
+    let mut board: Board = Board::empty();
+    board.place(
+        Piece {
+            piece_type: PieceType::Rook,
+            side: Side::White,
+        },
+        Pos::from_ordinals(3, 3),
+    );
 
     let mut control_state = ControlState {
         active_piece: Option::None,
