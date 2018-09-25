@@ -321,6 +321,11 @@ impl Board {
         match piece.piece_type {
             PieceType::Rook => self.move_squares_rook(pos),
             PieceType::Bishop => self.move_squares_bishop(pos),
+            PieceType::Queen => {
+                let mut lateral = self.move_squares_rook(pos);
+                lateral.append(&mut self.move_squares_bishop(pos));
+                lateral
+            }
             _ => panic!("Movement not implemented for this yet..."),
         }
     }
@@ -526,6 +531,13 @@ fn main() {
             side: Side::White,
         },
         Pos::from_ordinals(4, 6),
+    );
+    board.place(
+        Piece {
+            piece_type: PieceType::Queen,
+            side: Side::White,
+        },
+        Pos::from_ordinals(8, 8),
     );
 
     let mut control_state = ControlState {
