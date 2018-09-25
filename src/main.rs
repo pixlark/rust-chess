@@ -51,6 +51,18 @@ impl Piece {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+struct Move {
+    pos: Pos,
+    capture: Option<Piece>,
+}
+
+impl Move {
+    fn new(pos: Pos, capture: Option<Piece>) -> Move {
+        Move { pos, capture }
+    }
+}
+
 /// Stores textures for all pieces, black and white
 ///    W B
 ///    0 1
@@ -245,7 +257,34 @@ impl Board {
         );
         board
     }
-    fn test_line(self: &Board, pos: Pos, variant: SignedPos, extents: Option<usize>) -> Vec<Pos> {
+    fn capture_on_line(
+        self: &Board,
+        side: Side,
+        pos: Pos,
+        variant: SignedPos,
+        extents: Option<usize>,
+    ) -> Option<Pos> {
+        let mut vpos = SignedPos::from_pos(pos);
+        let mut len: usize = 0;
+        loop {
+            vpos.file += variant.file;
+            vpos.rank += variant.rank;
+            len += 1;
+            if extents.map(|e| len > e).unwrap_or(false) || !vpos.valid() || self
+                .at(vpos.to_pos())
+                .map(|p| p.side == side)
+                .unwrap_or(false)
+            {
+                break;
+            }
+        }
+        None
+    }
+    fn test_line(self: &Board, pos: Pos, variant: SignedPos, extents: Option<usize>) -> Vec<Move> {
+        // Note: This should never fail as an unwrap, which means it's
+        // ok to unwrap, right? I mean, if the game state is that
+        // messed up, crashing is ok, I think.
+        let side = self.at(pos).unwrap().side;
         let mut mvec = Vec::new();
         let mut vpos = SignedPos::from_pos(pos);
         let mut len: usize = 0;
@@ -253,18 +292,24 @@ impl Board {
             vpos.file += variant.file;
             vpos.rank += variant.rank;
             len += 1;
-            // TODO(pixlark): Should I go with a slightly longer if statement here for the sake of clarity?
-            if extents.map(|e| len > e).unwrap_or(false) {
+            // TODO(pixlark): Should I go with a slightly longer if
+            // statement here for the sake of clarity?
+            if extents.map(|e| len > e).unwrap_or(false) || !vpos.valid() {
                 break;
             }
-            if !vpos.valid() || self.at(vpos.to_pos()).is_some() {
+            let piece = self.at(vpos.to_pos());
+            if piece.is_some() {
+                let piece = piece.unwrap();
+                if piece.side != side {
+                    mvec.push(Move::new(vpos.to_pos(), Some(piece)));
+                }
                 break;
             }
-            mvec.push(vpos.to_pos());
+            mvec.push(Move::new(vpos.to_pos(), None));
         }
         mvec
     }
-    fn move_squares_lateral(self: &Board, pos: Pos, extents: Option<usize>) -> Vec<Pos> {
+    fn move_squares_lateral(self: &Board, pos: Pos, extents: Option<usize>) -> Vec<Move> {
         let mut mvec = Vec::new();
         let variants = [
             SignedPos::new(0, 1),  // N
@@ -277,7 +322,7 @@ impl Board {
         }
         mvec
     }
-    fn move_squares_diagonal(self: &Board, pos: Pos, extents: Option<usize>) -> Vec<Pos> {
+    fn move_squares_diagonal(self: &Board, pos: Pos, extents: Option<usize>) -> Vec<Move> {
         let mut mvec = Vec::new();
         let variants = [
             SignedPos::new(1, 1),   // NE
@@ -290,7 +335,8 @@ impl Board {
         }
         mvec
     }
-    fn move_squares_knight(self: &Board, pos: Pos) -> Vec<Pos> {
+    fn move_squares_knight(self: &Board, pos: Pos) -> Vec<Move> {
+        let side = self.at(pos).unwrap().side;
         let jump_square_offsets = [
             SignedPos::new(-1, -2),
             SignedPos::new(-2, -1),
@@ -306,24 +352,32 @@ impl Board {
             let mut npos = SignedPos::from_pos(pos);
             npos.file += offset.file;
             npos.rank += offset.rank;
-            if npos.valid() && self.at(npos.to_pos()).is_none() {
-                mvec.push(npos.to_pos())
+            if npos.valid() {
+                let piece = self.at(npos.to_pos());
+                if piece.is_some() {
+                    let piece = piece.unwrap();
+                    if (piece.side != side) {
+                        mvec.push(Move::new(npos.to_pos(), Some(piece)));
+                    }
+                } else {
+                    mvec.push(Move::new(npos.to_pos(), None))
+                }
             }
         }
         mvec
     }
-    fn move_squares_pawn(self: &Board, pos: Pos, side: Side) -> Vec<Pos> {
+    fn move_squares_pawn(self: &Board, pos: Pos, side: Side) -> Vec<Move> {
         let mut mvec = Vec::new();
         let fwd = match side {
             Side::White => Pos::new(pos.file, pos.rank + 1),
             Side::Black => Pos::new(pos.file, pos.rank - 1),
         };
         if SignedPos::from_pos(fwd).valid() && self.at(fwd).is_none() {
-            mvec.push(fwd);
+            mvec.push(Move::new(fwd, None));
         }
         mvec
     }
-    fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Pos> {
+    fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Move> {
         // TODO(pixlark): Combine piece and pos, just use self.at()?
         match piece.piece_type {
             PieceType::Pawn => self.move_squares_pawn(pos, piece.side),
@@ -356,7 +410,8 @@ impl Board {
         if self.at(start).is_some() {
             let start_piece = self.at(start).unwrap();
             let move_squares = self.move_squares(start_piece, start);
-            if move_squares.contains(&end) {
+            let square = move_squares.iter().find(|&x| x.pos == end);
+            if square.is_some() {
                 self.place(start_piece, end);
                 self.board[start.file][start.rank] = None;
             }
