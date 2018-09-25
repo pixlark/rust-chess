@@ -90,12 +90,19 @@ impl<'a> TextureTable<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
+struct SquareProp {
+    piece_visible: bool,
+}
+
 struct Board {
     /// [File][Rank]
     board: [[Option<Piece>; 8]; 8],
+    props: [[SquareProp; 8]; 8],
 }
 
 #[derive(Debug)]
+#[derive(Copy, Clone)]
 struct Pos {
     file: usize,
     rank: usize,
@@ -132,6 +139,9 @@ impl Board {
     fn empty() -> Board {
         Board {
             board: [[Option::None; 8]; 8],
+            props: [[SquareProp {
+                piece_visible: true,
+            }; 8]; 8],
         }
     }
     fn starting() -> Board {
@@ -213,9 +223,13 @@ impl Board {
         // Pieces
         for rank in 0..8 {
             for file in 0..8 {
-                if self.at(Pos::new(file, rank)).is_some() {
+                if !self.props[file][rank].piece_visible {
+                    continue;
+                }
+                let piece_op = self.at(Pos::new(file, rank));
+                if piece_op.is_some() {
                     self.draw_piece(
-                        self.at(Pos::new(file, rank)).unwrap(),
+                        piece_op.unwrap(),
                         Pos::new(file, rank),
                         canvas,
                         texture_table,
@@ -226,14 +240,42 @@ impl Board {
         Result::Ok(())
     }
     fn coord_to_pos(coord: (i32, i32)) -> Pos {
-        Pos::new((coord.0 as f32 / SQUARE_SIZE as f32).floor() as usize,
-                 7 - (coord.1 as f32 / SQUARE_SIZE as f32).floor() as usize)
+        Pos::new(
+            (coord.0 as f32 / SQUARE_SIZE as f32).floor() as usize,
+            7 - (coord.1 as f32 / SQUARE_SIZE as f32).floor() as usize,
+        )
     }
-    fn update(self: &Board, pump: &sdl2::EventPump) {
+    fn get_click(self: &mut Board, pump: &sdl2::EventPump) -> Option<Pos> {
         let mouse_state = pump.mouse_state();
         if mouse_state.left() {
-            println!("{:?}", Board::coord_to_pos((mouse_state.x(), mouse_state.y())));
+            let pos = Board::coord_to_pos((mouse_state.x(), mouse_state.y()));
+            Option::Some(pos)
+        } else {
+            Option::None
         }
+    }
+}
+
+#[derive(Debug)]
+struct ControlState {
+    active_piece: Option<Pos>,
+}
+
+fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::EventPump) {
+    match board.get_click(pump) {
+        Option::Some(pos) => {
+            if control_state.active_piece.is_none() {
+                control_state.active_piece = Option::Some(pos);
+                board.props[pos.file][pos.rank].piece_visible = false;
+            }
+        },
+        Option::None => {
+            if control_state.active_piece.is_some() {
+                let pos = control_state.active_piece.unwrap();
+                board.props[pos.file][pos.rank].piece_visible = true;
+                control_state.active_piece = Option::None;
+            }
+        },
     }
 }
 
@@ -255,6 +297,10 @@ fn main() {
 
     let mut board: Board = Board::starting();
 
+    let mut control_state = ControlState {
+        active_piece: Option::None,
+    };
+
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -264,7 +310,10 @@ fn main() {
             }
         }
         canvas.set_draw_color(Color::RGB(0x00, 0x00, 0x00));
-        board.update(&event_pump);
+
+        update(&mut board, &mut control_state, &event_pump);
+        //println!("{:?}", control_state);
+
         board.draw(&mut canvas, &texture_table).unwrap();
         canvas.present();
     }
