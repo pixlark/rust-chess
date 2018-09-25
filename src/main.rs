@@ -294,12 +294,12 @@ impl Board {
         let jump_square_offsets = [
             SignedPos::new(-1, -2),
             SignedPos::new(-2, -1),
-            SignedPos::new(-2,  1),
-            SignedPos::new(-1,  2),
-            SignedPos::new( 1,  2),
-            SignedPos::new( 2,  1),
-            SignedPos::new( 2, -1),
-            SignedPos::new( 1, -2),
+            SignedPos::new(-2, 1),
+            SignedPos::new(-1, 2),
+            SignedPos::new(1, 2),
+            SignedPos::new(2, 1),
+            SignedPos::new(2, -1),
+            SignedPos::new(1, -2),
         ];
         let mut mvec = Vec::new();
         for offset in jump_square_offsets.iter() {
@@ -312,9 +312,21 @@ impl Board {
         }
         mvec
     }
+    fn move_squares_pawn(self: &Board, pos: Pos, side: Side) -> Vec<Pos> {
+        let mut mvec = Vec::new();
+        let fwd = match side {
+            Side::White => Pos::new(pos.file, pos.rank + 1),
+            Side::Black => Pos::new(pos.file, pos.rank - 1),
+        };
+        if SignedPos::from_pos(fwd).valid() && self.at(fwd).is_none() {
+            mvec.push(fwd);
+        }
+        mvec
+    }
     fn move_squares(self: &Board, piece: Piece, pos: Pos) -> Vec<Pos> {
         // TODO(pixlark): Combine piece and pos, just use self.at()?
         match piece.piece_type {
+            PieceType::Pawn => self.move_squares_pawn(pos, piece.side),
             PieceType::Knight => self.move_squares_knight(pos),
             PieceType::Bishop => self.move_squares_diagonal(pos, None),
             PieceType::Rook => self.move_squares_lateral(pos, None),
@@ -520,6 +532,10 @@ fn main() {
     board.place(
         Piece::new(PieceType::Pawn, Side::White),
         Pos::from_ordinals(5, 5),
+    );
+    board.place(
+        Piece::new(PieceType::Pawn, Side::Black),
+        Pos::from_ordinals(6, 5),
     );
     board.place(
         Piece::new(PieceType::Bishop, Side::White),
