@@ -173,6 +173,15 @@ impl Board {
     fn at(self: &Board, pos: Pos) -> Option<Piece> {
         self.board[pos.file][pos.rank]
     }
+    fn mov(self: &mut Board, start: Pos, end: Pos) {
+        //self.board[end.file][end.rank] = self.board[start.file][start.rank];
+        if self.at(start).is_some() && self.at(end).is_none() {
+            let start_piece = self.at(start).unwrap(); // Can't do this in self.place directly
+                                                       // because the borrow checker is a dumb machine.
+            self.place(start_piece, end);
+            self.board[start.file][start.rank] = Option::None;
+        }
+    }
     fn draw_square(self: &Board, canvas: &mut WindowCanvas, pos: Pos) -> Result<(), String> {
         if (pos.file + pos.rank) % 2 == 0 {
             canvas.set_draw_color(WHITE_SQUARE);
@@ -261,6 +270,7 @@ struct ControlState {
 }
 
 fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::EventPump) {
+    let mouse_state = pump.mouse_state(); // TODO(pixlark): Perhaps just pass MouseState rather than EventPump?
     match board.get_click(pump) {
         Option::Some(pos) => {
             if control_state.active_piece.is_none() {
@@ -271,6 +281,7 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
         Option::None => {
             if control_state.active_piece.is_some() {
                 let pos = control_state.active_piece.unwrap();
+                board.mov(pos, Board::coord_to_pos((mouse_state.x(), mouse_state.y())));
                 board.props[pos.file][pos.rank].piece_visible = true;
                 control_state.active_piece = Option::None;
             }
@@ -301,7 +312,7 @@ fn draw_transient_piece(
                     SQUARE_SIZE,
                     SQUARE_SIZE,
                 )),
-            );            
+            );
         }
     }
 }
@@ -342,7 +353,13 @@ fn main() {
         //println!("{:?}", control_state);
 
         board.draw(&mut canvas, &texture_table).unwrap();
-        draw_transient_piece(&mut canvas, &board, &control_state, &event_pump, &texture_table);
+        draw_transient_piece(
+            &mut canvas,
+            &board,
+            &control_state,
+            &event_pump,
+            &texture_table,
+        );
         canvas.present();
     }
 }
