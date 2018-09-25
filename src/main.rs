@@ -8,10 +8,19 @@ use sdl2::rect::Rect;
 use sdl2::render::{Texture, TextureCreator};
 use sdl2::video::WindowContext;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum Side {
     White = 0,
     Black = 1,
+}
+
+impl Side {
+    fn flip(self: &Side) -> Side {
+        match self {
+            Side::White => Side::Black,
+            Side::Black => Side::White,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -274,7 +283,9 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
     let mouse_state = pump.mouse_state(); // TODO(pixlark): Perhaps just pass MouseState rather than EventPump?
     match board.get_click(pump) {
         Option::Some(pos) => {
-            if board.at(pos).is_some() && control_state.active_piece.is_none() {
+            if board.at(pos).is_some() &&
+               board.at(pos).unwrap().side == control_state.turn &&
+               control_state.active_piece.is_none() {
                 control_state.active_piece = Option::Some(pos);
                 board.props[pos.file][pos.rank].piece_visible = false;
             }
@@ -285,6 +296,7 @@ fn update(board: &mut Board, control_state: &mut ControlState, pump: &sdl2::Even
                 board.mov(pos, Board::coord_to_pos((mouse_state.x(), mouse_state.y())));
                 board.props[pos.file][pos.rank].piece_visible = true;
                 control_state.active_piece = Option::None;
+                control_state.turn = control_state.turn.flip();
             }
         }
     }
